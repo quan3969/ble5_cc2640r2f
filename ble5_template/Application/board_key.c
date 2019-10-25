@@ -47,7 +47,6 @@
 /*********************************************************************
  * INCLUDES
  */
-#include <iostream>
 #include <stdbool.h>
 #include <ti/sysbios/knl/Clock.h>
 #include <ti/sysbios/family/arm/m3/Hwi.h>
