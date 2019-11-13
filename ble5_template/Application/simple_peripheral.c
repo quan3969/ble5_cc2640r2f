@@ -125,6 +125,9 @@
 // How often to perform periodic event (in ms)
 #define SP_PERIODIC_EVT_PERIOD               5000
 
+// How often to perform periodic event (in ms)
+#define LED_PERIODIC_EVT_PERIOD              100
+
 // How often to read current current RPA (in ms)
 #define SP_READ_RPA_EVT_PERIOD               3000
 
@@ -149,6 +152,7 @@
 #define SP_READ_RPA_EVT                      7
 #define SP_SEND_PARAM_UPDATE_EVT             8
 #define SP_CONN_EVT                          9
+#define LED_PERIODIC_EVT                     10
 
 // Internal Events for RTOS application
 #define SP_ICALL_EVT                         ICALL_MSG_EVENT_ID // Event_Id_31
@@ -296,6 +300,8 @@ static Queue_Handle appMsgQueueHandle;
 static Clock_Struct clkPeriodic;
 // Clock instance for RPA read events.
 static Clock_Struct clkRpaRead;
+// Clock instance for LED.
+static Clock_Struct ledClkPeriodic;
 
 // Memory to pass periodic event ID to clock handler
 spClockEventData_t argPeriodic =
@@ -304,6 +310,10 @@ spClockEventData_t argPeriodic =
 // Memory to pass RPA read event ID to clock handler
 spClockEventData_t argRpaRead =
 { .event = SP_READ_RPA_EVT };
+
+// Memory to pass LED event ID to clock handler
+spClockEventData_t argLEDPeriodic =
+{ .event = LED_PERIODIC_EVT };
 
 // Per-handle connection info
 static spConnRec_t connList[MAX_NUM_BLE_CONNS];
@@ -384,6 +394,24 @@ static GAP_Addr_Modes_t addrMode = DEFAULT_ADDRESS_MODE;
 static uint8 rpa[B_ADDR_LEN] = {0};
 #endif // PRIVACY_1_2_CFG
 
+/* Pin driver handles */
+static PIN_Handle ledPinHandle;
+
+/* Global memory storage for a PIN_Config table */
+static PIN_State ledPinState;
+
+/*
+ * Initial LED pin configuration table
+ *   - LEDs Board_PIN_LED0 & Board_PIN_LED1 are off.
+ */
+PIN_Config ledPinTable[] = {
+    Board_PIN_RLED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL |
+    PIN_DRVSTR_MAX,
+    Board_PIN_GLED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL |
+    PIN_DRVSTR_MAX,
+    PIN_TERMINATE
+};
+
 /*********************************************************************
  * LOCAL FUNCTIONS
  */
@@ -399,6 +427,7 @@ static void SimplePeripheral_processAdvEvent(spGapAdvEventData_t *pEventData);
 static void SimplePeripheral_processAppMsg(spEvt_t *pMsg);
 static void SimplePeripheral_processCharValueChangeEvt(uint8_t paramId);
 static void SimplePeripheral_performPeriodicTask(void);
+static void SimplePeripheral_performLedPeriodicTask(void);
 #if defined(BLE_V42_FEATURES) && (BLE_V42_FEATURES & PRIVACY_1_2_CFG)
 static void SimplePeripheral_updateRPA(void);
 #endif // PRIVACY_1_2_CFG
@@ -582,6 +611,10 @@ static void SimplePeripheral_init(void)
   Util_constructClock(&clkPeriodic, SimplePeripheral_clockHandler,
                       SP_PERIODIC_EVT_PERIOD, 0, false, (UArg)&argPeriodic);
 
+  // Create one-shot clock for internal periodic events.
+  Util_constructClock(&ledClkPeriodic, SimplePeripheral_clockHandler,
+                      LED_PERIODIC_EVT_PERIOD, 0, true, (UArg)&argLEDPeriodic);
+
   // Set the Device Name characteristic in the GAP GATT Service
   // For more information, see the section in the User's Guide:
   // http://software-dl.ti.com/lprf/ble5stack-latest/
@@ -619,6 +652,11 @@ static void SimplePeripheral_init(void)
     GAPBondMgr_SetParameter(GAPBOND_BONDING_ENABLED, sizeof(uint8_t), &bonding);
   }
 #endif
+
+  // Open LED pins
+  ledPinHandle = PIN_open(&ledPinState, ledPinTable);
+  PIN_setOutputValue(ledPinHandle, Board_RLED, Board_LED_ON);
+  PIN_setOutputValue(ledPinHandle, Board_GLED, Board_LED_ON);
 
   // Initialize GATT attributes
   GGS_AddService(GATT_ALL_SERVICES);           // GAP GATT Service
@@ -1002,6 +1040,10 @@ static void SimplePeripheral_processAppMsg(spEvt_t *pMsg)
 
     case SP_PERIODIC_EVT:
       SimplePeripheral_performPeriodicTask();
+      break;
+
+    case LED_PERIODIC_EVT:
+      SimplePeripheral_performLedPeriodicTask();
       break;
 
 #if defined(BLE_V42_FEATURES) && (BLE_V42_FEATURES & PRIVACY_1_2_CFG)
@@ -1391,6 +1433,38 @@ static void SimplePeripheral_performPeriodicTask(void)
   }
 }
 
+/*********************************************************************
+ * @fn      SimplePeripheral_performLedPeriodicTask
+ *
+ * @brief   Perform a periodic application task. This function gets called
+ *          every five seconds (SP_PERIODIC_EVT_PERIOD). In this example,
+ *          the value of the third characteristic in the SimpleGATTProfile
+ *          service is retrieved from the profile, and then copied into the
+ *          value of the the fourth characteristic.
+ *
+ * @param   None.
+ *
+ * @return  None.
+ */
+static void SimplePeripheral_performLedPeriodicTask(void)
+{
+  static uint8_t temp = 0;
+  Util_startClock(&ledClkPeriodic);
+  if (temp == 0)
+  {
+      temp = 1;
+      PIN_setOutputValue(ledPinHandle, Board_RLED, Board_LED_ON);
+      PIN_setOutputValue(ledPinHandle, Board_GLED, Board_LED_OFF);
+  }
+  else
+  {
+      temp = 0;
+      PIN_setOutputValue(ledPinHandle, Board_GLED, Board_LED_ON);
+      PIN_setOutputValue(ledPinHandle, Board_RLED, Board_LED_OFF);
+  }
+
+}
+
 #if defined(BLE_V42_FEATURES) && (BLE_V42_FEATURES & PRIVACY_1_2_CFG)
 /*********************************************************************
  * @fn      SimplePeripheral_updateRPA
@@ -1452,6 +1526,10 @@ static void SimplePeripheral_clockHandler(UArg arg)
  {
     // Send message to app
     SimplePeripheral_enqueueMsg(SP_SEND_PARAM_UPDATE_EVT, pData);
+ }
+ else if (pData->event == LED_PERIODIC_EVT)
+ {
+    SimplePeripheral_enqueueMsg(LED_PERIODIC_EVT, pData);
  }
 }
 
