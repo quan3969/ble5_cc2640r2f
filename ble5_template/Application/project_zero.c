@@ -112,16 +112,12 @@
 
 // Types of messages that can be sent to the user application task from other
 // tasks or interrupts. Note: Messages from BLE Stack are sent differently.
-#define PZ_SERVICE_WRITE_EVT     0  /* A characteristic value has been written     */
-#define PZ_SERVICE_CFG_EVT       1  /* A characteristic configuration has changed  */
-#define PZ_UPDATE_CHARVAL_EVT    2  /* Request from ourselves to update a value    */
-#define PZ_BUTTON_DEBOUNCED_EVT  3  /* A button has been debounced with new value  */
-#define PZ_PAIRSTATE_EVT         4  /* The pairing state is updated                */
-#define PZ_PASSCODE_EVT          5  /* A pass-code/PIN is requested during pairing */
-#define PZ_ADV_EVT               6  /* A subscribed advertisement activity         */
-#define PZ_START_ADV_EVT         7  /* Request advertisement start from task ctx   */
-#define PZ_SEND_PARAM_UPD_EVT    8  /* Request parameter update req be sent        */
-#define PZ_CONN_EVT              9  /* Connection Event End notice                 */
+#define PZ_PAIRSTATE_EVT         0  /* The pairing state is updated                */
+#define PZ_PASSCODE_EVT          1  /* A pass-code/PIN is requested during pairing */
+#define PZ_ADV_EVT               2  /* A subscribed advertisement activity         */
+#define PZ_START_ADV_EVT         3  /* Request advertisement start from task ctx   */
+#define PZ_SEND_PARAM_UPD_EVT    4  /* Request parameter update req be sent        */
+#define PZ_CONN_EVT              5  /* Connection Event End notice                 */
 
 // General discoverable mode: advertise indefinitely
 #define DEFAULT_DISCOVERABLE_MODE             GAP_ADTYPE_FLAGS_GENERAL
